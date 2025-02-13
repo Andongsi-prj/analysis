@@ -86,7 +86,7 @@ def get_news_list(url, counter, last_known_date):
                 last_known_date = publish_date  # ✅ 현재 날짜를 저장하여 이후에 활용
 
             # ✅ 본문 요약 크롤링
-            summary_element = article.select_one("a.dsc_txt_wrap")
+            summary_element = article.select_one("div.news_contents > div > div > a")
             content = summary_element.text.strip() if summary_element else "요약 없음"
 
             # ✅ 데이터 MySQL에 저장

@@ -87,40 +87,21 @@ def get_news_list(url, counter, last_known_date):
             else:
                 last_known_date = publish_date
 
-            # ✅ 본문 전체 크롤링 (기사 URL 방문)
-            if article_url:
-                full_content = get_full_article(article_url)
-            else:
-                full_content = "본문 없음"
+            # ✅ 본문 크롤링 (올바른 선택자 적용)
+            summary_element = article.select_one("div.news_contents > div > div > a")
+            content = summary_element.text.strip() if summary_element else "본문 없음"
 
             # ✅ 데이터 MySQL에 저장
-            save_to_db(title, full_content, publish_date)
+            save_to_db(title, content, publish_date)
 
-            # ✅ 날짜와 저장된 데이터 개수만 출력
+            # ✅ 날짜와 저장된 데이터 개수만 출력 (시분초 제거)
             counter[0] += 1
-            print(f"✅ {publish_date} - 저장된 데이터 개수: {counter[0]}")
+            formatted_date = publish_date.split(" ")[0]  # ✅ 'YYYY-MM-DD' 부분만 추출
+            print(f"✅ {formatted_date} - 저장된 데이터 개수: {counter[0]}")
         except Exception as e:
             print(f"❌ 오류 발생: {e}")
     
     return True, last_known_date
-
-def get_full_article(article_url):
-    """기사 URL 방문 후 전체 본문 크롤링"""
-    try:
-        response = session.get(article_url, headers=headers)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
-
-        # ✅ 네이버 뉴스인지 확인 (네이버 뉴스 도메인: news.naver.com)
-        if "news.naver.com" in article_url:
-            article_body = soup.select_one("#dic_area")  # 네이버 뉴스 본문 선택
-        else:
-            article_body = soup.select_one("article")  # 일반적인 뉴스 사이트
-
-        return article_body.get_text(strip=True) if article_body else "본문 없음"
-    except requests.RequestException as e:
-        print(f"❌ 본문 크롤링 실패: {article_url}, 오류: {e}")
-        return "본문 없음"
 
 def parse_publish_date(date_text):
     """네이버 뉴스에서 가져온 날짜 텍스트를 변환 (YYYY-MM-DD HH:MM:SS)"""
@@ -162,9 +143,9 @@ def save_to_db(title, content, news_date):
 
 def random_sleep():
     """랜덤한 시간 동안 대기 (2~6초, 20% 확률로 10~15초)"""
-    sleep_time = random.uniform(2, 6)
+    sleep_time = random.uniform(3, 4)
     if random.random() < 0.2:
-        sleep_time = random.uniform(10, 15)
+        sleep_time = random.uniform(5, 7)
     
     print(f"⏳ {sleep_time:.2f}초 대기...")
     time.sleep(sleep_time)
