@@ -1,3 +1,11 @@
+"""
+과거로 무한 크롤링
+철강 검색하면 뜨는 모든 기사
+403 발생 시, 10분 후 재시도, 실패시 해당 날짜 기록
+중복 기사 방지 : seen_titles 및 insert ignorea(쿼리)
+"""
+
+
 import random
 import requests
 from requests.adapters import HTTPAdapter
@@ -38,17 +46,28 @@ headers = {
 # ✅ 중복 방지를 위한 제목 저장 (이미 저장된 뉴스 체크)
 seen_titles = set()
 
+# ✅ 403 에러 발생 후 실패한 날짜 저장 리스트
+failed_dates = set()
+
 def get_news_list(url, counter, current_date):
     """네이버 뉴스 검색 결과에서 모든 기사 크롤링 후 MySQL에 저장"""
     try:
-        response = session.get(url, headers=headers)
-        if response.status_code == 403:
-            print("❌ 403 Forbidden - 네이버 차단됨. 일정 시간 후 다시 시도하세요.")
-            time.sleep(600)
-            return False
+        for attempt in range(2):  # ✅ 2번까지 재시도 가능
+            response = session.get(url, headers=headers)
+            if response.status_code == 403:
+                if attempt == 0:
+                    print(f"❌ 403 Forbidden - {current_date} 크롤링 차단됨. 10분 후 재시도합니다...")
+                    time.sleep(600)  # ✅ 10분 대기 후 재시도
+                    continue
+                else:
+                    print(f"❌ {current_date} 크롤링 재시도 실패. 해당 날짜를 기록합니다.")
+                    failed_dates.add(current_date)  # ✅ 실패한 날짜 기록
+                    return False
 
-        response.raise_for_status()
-        random_sleep()
+            response.raise_for_status()
+            random_sleep()
+            break  # ✅ 403이 발생하지 않으면 루프 탈출
+
     except requests.RequestException as e:
         print(f"❌ 검색 결과 페이지 요청 실패: {url}, 오류: {e}")
         return False
@@ -89,10 +108,10 @@ def get_news_list(url, counter, current_date):
     return True
 
 def save_to_db(title, content, publish_date):
-    """MySQL에 뉴스 데이터 저장"""
+    """MySQL에 뉴스 데이터 저장 (INSERT IGNORE 사용하여 중복 방지)"""
     try:
         insert_query = """
-        INSERT INTO stage_news (title, content, news_date)
+        INSERT IGNORE INTO stage_news (title, content, news_date)
         VALUES (%s, %s, %s)
         """
         cursor.execute(insert_query, (title, content, publish_date))
@@ -141,6 +160,12 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\n⏹ 크롤링 중지 요청됨. 현재 진행 중인 날짜 마무리 후 종료합니다...")
     finally:
+        # ✅ 크롤링 실패한 날짜 출력
+        if failed_dates:
+            print("\n❌ 크롤링 실패한 날짜 목록:")
+            for date in sorted(failed_dates):
+                print(f"- {date}")
+
         print("✅ 크롤링 및 MySQL 저장 완료.")
         cursor.close()
         db.close()
